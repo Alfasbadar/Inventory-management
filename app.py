@@ -31,68 +31,180 @@ class Product:
         self.expiry_date = expiry_date
         self.image_path = image_path
 
-# Billing tab class 
+#search popup
+
+class SearchPopup(tk.Toplevel):
+    def __init__(self, master, search_var, suggestions, **kwargs):
+        super().__init__(master, **kwargs)
+        self.geometry("200x100+{}+{}".format(
+            master.winfo_rootx() + search_var.winfo_x(),
+            master.winfo_rooty() + search_var.winfo_y() + search_var.winfo_height()
+        ))
+        self.transient(master)
+        self.search_var = search_var
+
+        self.suggestion_listbox = tk.Listbox(self)
+        self.suggestion_listbox.pack(expand=True, fill="both")
+
+        self.suggestion_listbox.bind("<ButtonRelease-1>", self.on_suggestion_selected)
+        self.update_suggestions()
+
+    def update_suggestions(self):
+        search_text = self.search_var.get().lower()
+        suggestions = ["Apple", "Banana", "Orange", "Mango"]
+        filtered_suggestions = [suggestion for suggestion in suggestions if search_text in suggestion.lower()]
+        self.suggestion_listbox.delete(0, tk.END)
+        for suggestion in filtered_suggestions:
+            self.suggestion_listbox.insert(tk.END, suggestion)
+
+    def on_suggestion_selected(self, event):
+        selected_index = self.suggestion_listbox.curselection()
+        if selected_index:
+            selected_value = self.suggestion_listbox.get(selected_index)
+            self.search_var.set(selected_value)
+        self.destroy()
+
+class GenerateBillDialog(simpledialog.Dialog):
+    def __init__(self, master, **kwargs):
+        self.bill_id = datetime.now().strftime("%d%m%y%H%M")
+        self.customer_name = tk.StringVar()
+        self.customer_phone = tk.StringVar()
+        self.search_var = tk.StringVar()
+
+        self.bill_details = []
+
+        super().__init__(master, **kwargs)
+
+    def body(self, master):
+        tk.Label(master, text="Bill ID: {}".format(self.bill_id)).grid(row=0, column=0, columnspan=2, sticky="w")
+
+        tk.Label(master, text="Customer Name:").grid(row=1, column=0, sticky="w")
+        tk.Entry(master, textvariable=self.customer_name).grid(row=1, column=1, sticky="w")
+
+        tk.Label(master, text="Customer Phone:").grid(row=2, column=0, sticky="w")
+        tk.Entry(master, textvariable=self.customer_phone).grid(row=2, column=1, sticky="w")
+
+        tk.Label(master, text="Search:").grid(row=3, column=0, sticky="w")
+        search_entry = ttk.Entry(master, textvariable=self.search_var)
+        search_entry.grid(row=3, column=1, sticky="w")
+        search_entry.bind("<FocusIn>", self.show_suggestions)
+
+        search_button = tk.Button(master, text="Search")
+        search_button.grid(row=3, column=2, sticky="w")
+
+        # Treeview
+        tree_columns = ("ID", "Product Name", "Quantity", "Price")
+        self.bill_treeview = ttk.Treeview(master, columns=tree_columns, show="headings", height=10)
+
+        for col in tree_columns:
+            self.bill_treeview.heading(col, text=col)
+            self.bill_treeview.column(col, anchor="center")
+
+        self.bill_treeview.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
+
+        # Set up the grid row and column configurations
+        master.grid_rowconfigure(4, weight=1)
+        master.grid_columnconfigure(0, weight=1)
+
+        # Scrollbars
+        vertical_scrollbar = ttk.Scrollbar(master, orient="vertical", command=self.bill_treeview.yview)
+        vertical_scrollbar.grid(row=4, column=3, sticky="ns")
+        self.bill_treeview.configure(yscrollcommand=vertical_scrollbar.set)
+
+        return search_entry
+
+    def show_suggestions(self, event):
+        if self.search_var.get():
+            popup = SearchPopup(self, self.search_var, [])
+            self.wait_window(popup)
+
+    def apply(self):
+        # Apply logic for generating the bill here
+        self.generate_bill()
+
+    def generate_bill(self):
+        # Placeholder logic, you need to replace this with actual product details retrieval
+        product_details = [
+            {"id": 1, "name": "Product A", "quantity": 2, "price": 10.0},
+            {"id": 2, "name": "Product B", "quantity": 3, "price": 15.0},
+        ]
+
+        self.bill_details = [(item["id"], item["name"], item["quantity"], item["price"]) for item in product_details]
+
+        # Add your logic for saving the bill to the database
+        self.save_bill_to_database()
+
+    def save_bill_to_database(self):
+        # Placeholder for saving bill to database
+        bill_data = {
+            "bill_id": self.bill_id,
+            "customer_name": self.customer_name.get(),
+            "customer_phone": self.customer_phone.get(),
+            "bill_details": self.bill_details,
+            "total_amount": sum(item[2] * item[3] for item in self.bill_details)
+        }
+
+        print("Saving Bill to Database:", bill_data)
+        # Implement your database integration logic here
+
 class BillingTab(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         self.create_widgets()
 
     def create_widgets(self):
-        # Bill History Section
-        self.bill_history_treeview = ttk.Treeview(self, columns=("Bill No", "Date"))
-        self.bill_history_treeview.heading("#0", text="Bill History")
-        self.bill_history_treeview.heading("Bill No", text="Bill No")
-        self.bill_history_treeview.heading("Date", text="Date")
-        self.bill_history_treeview.pack(side="left", fill="both", expand=True)
+        # Navigation bar
+        nav_frame = tk.Frame(self)
+        nav_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
+        nav_frame.grid_columnconfigure(1, weight=1)  # Allow the search bar to expand
 
-        # Generate Bill Section
-        self.generate_bill_frame = ttk.Frame(self)
-        self.generate_bill_frame.pack(side="left", fill="both", expand=True)
-
-        # Search Bar
+        # Search bar and button
         self.search_var = tk.StringVar()
-        search_entry = tk.Entry(self.generate_bill_frame, textvariable=self.search_var)
-        search_entry.grid(row=0, column=0, padx=10, pady=10)
-        search_entry.bind("<Return>", self.add_item_from_search)
+        search_entry = ttk.Entry(nav_frame, textvariable=self.search_var, width=30)
+        search_entry.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        search_entry.bind("<FocusIn>", self.show_suggestions)
 
-        # Search Suggestions Treeview
-        self.suggestions_treeview = ttk.Treeview(self.generate_bill_frame, columns=("ID", "Name", "Quantity", "Price"))
-        self.suggestions_treeview.heading("#0", text="Suggestions")
-        self.suggestions_treeview.heading("ID", text="ID")
-        self.suggestions_treeview.heading("Name", text="Name")
-        self.suggestions_treeview.heading("Quantity", text="Quantity")
-        self.suggestions_treeview.heading("Price", text="Price")
-        self.suggestions_treeview.grid(row=1, column=0, padx=10, pady=10)
-        self.suggestions_treeview.bind("<Double-Button-1>", self.add_item_from_suggestions)
+        search_button = tk.Button(nav_frame, text="Search")
+        search_button.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-        # Bill Items Treeview
-        self.bill_items_treeview = ttk.Treeview(self.generate_bill_frame, columns=("ID", "Name", "Quantity", "Price"))
-        self.bill_items_treeview.heading("#0", text="Bill Items")
-        self.bill_items_treeview.heading("ID", text="ID")
-        self.bill_items_treeview.heading("Name", text="Name")
-        self.bill_items_treeview.heading("Quantity", text="Quantity")
-        self.bill_items_treeview.heading("Price", text="Price")
-        self.bill_items_treeview.grid(row=1, column=1, padx=10, pady=10)
+        # Generate Bill button
+        generate_bill_button = tk.Button(nav_frame, text="Generate Bill", command=self.generate_bill)
+        generate_bill_button.grid(row=0, column=2, padx=5, pady=5, sticky="e")
 
-        # Generate Bill Button
-        generate_bill_button = tk.Button(self.generate_bill_frame, text="Generate Bill", command=self.generate_bill)
-        generate_bill_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
+        # Treeview
+        tree_columns = ("Bill ID", "Customer Name", "Customer Phone", "Price")
+        self.bill_treeview = ttk.Treeview(self, columns=tree_columns, show="headings", height=10)
 
-    def add_item_from_search(self, event):
-        # Placeholder: Implement item addition based on search
-        # You can fetch item details from the database based on the search term
-        # and add it to the billing items treeview
-        pass
+        for col in tree_columns:
+            self.bill_treeview.heading(col, text=col)
+            self.bill_treeview.column(col, anchor="center")  # Center-align the column headers
 
-    def add_item_from_suggestions(self, event):
-        # Placeholder: Implement item addition based on double-click on suggestions
-        # You can fetch item details from the selected suggestion and add it to the billing items treeview
-        pass
+        self.bill_treeview.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+
+        # Set up the grid row and column configurations
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        # Scrollbars
+        vertical_scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.bill_treeview.yview)
+        vertical_scrollbar.grid(row=1, column=2, sticky="ns")
+        self.bill_treeview.configure(yscrollcommand=vertical_scrollbar.set)
+
+    def show_suggestions(self, event):
+        if self.search_var.get():
+            popup = SearchPopup(self, self.search_var, [])
+            self.wait_window(popup)
 
     def generate_bill(self):
-        # Placeholder: Implement bill generation logic
-        # Calculate total amount, update quantity in the inventory, and save the bill
-        pass
+        dialog = GenerateBillDialog(self.master)
+        self.wait_window(dialog)
+
+        # After the dialog is closed, you can update the Treeview with the generated bill data
+        # For now, let's add a placeholder entry
+        self.bill_treeview.insert("", "end", values=("123456", "John Doe", "123-456-7890", "$100.00"))
+
+
+             
 
 class InventoryApp(tk.Tk):
     def __init__(self):
