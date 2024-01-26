@@ -31,45 +31,14 @@ class Product:
         self.expiry_date = expiry_date
         self.image_path = image_path
 
-#search popup
-
-class SearchPopup(tk.Toplevel):
-    def __init__(self, master, search_var, suggestions, **kwargs):
-        super().__init__(master, **kwargs)
-        self.geometry("200x100+{}+{}".format(
-            master.winfo_rootx() + search_var.winfo_x(),
-            master.winfo_rooty() + search_var.winfo_y() + search_var.winfo_height()
-        ))
-        self.transient(master)
-        self.search_var = search_var
-
-        self.suggestion_listbox = tk.Listbox(self)
-        self.suggestion_listbox.pack(expand=True, fill="both")
-
-        self.suggestion_listbox.bind("<ButtonRelease-1>", self.on_suggestion_selected)
-        self.update_suggestions()
-
-    def update_suggestions(self):
-        search_text = self.search_var.get().lower()
-        suggestions = ["Apple", "Banana", "Orange", "Mango"]
-        filtered_suggestions = [suggestion for suggestion in suggestions if search_text in suggestion.lower()]
-        self.suggestion_listbox.delete(0, tk.END)
-        for suggestion in filtered_suggestions:
-            self.suggestion_listbox.insert(tk.END, suggestion)
-
-    def on_suggestion_selected(self, event):
-        selected_index = self.suggestion_listbox.curselection()
-        if selected_index:
-            selected_value = self.suggestion_listbox.get(selected_index)
-            self.search_var.set(selected_value)
-        self.destroy()
-
 class GenerateBillDialog(simpledialog.Dialog):
     def __init__(self, master, **kwargs):
+        print("Generate Bill dialog")
         self.bill_id = datetime.now().strftime("%d%m%y%H%M")
         self.customer_name = tk.StringVar()
         self.customer_phone = tk.StringVar()
         self.search_var = tk.StringVar()
+        self.suggestion_box = None  # To store the suggestion box reference
 
         self.bill_details = []
 
@@ -87,7 +56,8 @@ class GenerateBillDialog(simpledialog.Dialog):
         tk.Label(master, text="Search:").grid(row=3, column=0, sticky="w")
         search_entry = ttk.Entry(master, textvariable=self.search_var)
         search_entry.grid(row=3, column=1, sticky="w")
-        search_entry.bind("<FocusIn>", self.show_suggestions)
+        self.search_var_entry = search_entry
+        search_entry.bind("<KeyRelease>", self.onSearchUpdate)
 
         search_button = tk.Button(master, text="Search")
         search_button.grid(row=3, column=2, sticky="w")
@@ -112,18 +82,39 @@ class GenerateBillDialog(simpledialog.Dialog):
         self.bill_treeview.configure(yscrollcommand=vertical_scrollbar.set)
 
         return search_entry
+    
+    def onSearchUpdate(self, event):
+        search_text = self.search_var.get()
+        print("Search updated:", search_text)
 
-    def show_suggestions(self, event):
-        if self.search_var.get():
-            popup = SearchPopup(self, self.search_var, [])
-            self.wait_window(popup)
+        # Close existing suggestion box, if any
+        if self.suggestion_box:
+            self.suggestion_box.destroy()
 
-    def apply(self):
-        # Apply logic for generating the bill here
-        self.generate_bill()
+        # Get the widget that currently has focus (assuming it's the search entry)
+        search_entry = self.master.focus_get()
+        
+        # Calculate the position of the suggestion box below the search entry
+        x = self.master.winfo_rootx() + search_entry.winfo_x()
+        y = self.master.winfo_rooty() + search_entry.winfo_y() + search_entry.winfo_height()
 
+        # Create a new suggestion box
+        print("Creating suggestion box")
+        self.suggestion_box = tk.Toplevel(self.master)
+        self.suggestion_box.overrideredirect(True)  # Remove window decorations
+        self.suggestion_box.attributes("-alpha", 0.9)  # Set transparency
+        self.suggestion_box.geometry(f"+{x}+{y+5}")
+        
+        # Add your logic to fetch and display search suggestions in the suggestion box
+        print("before the for loop line 109")
+        for item in item_list:
+            item_id, item_name = item[0], item[1].lower()
+            if search_text in str(item_id) or search_text in item_name:
+                suggestion_text = f"{item_id}: {item_name}"
+                tk.Label(self.suggestion_box, text=suggestion_text, bg="white").pack()
+       
     def generate_bill(self):
-        # Placeholder logic, you need to replace this with actual product details retrieval
+         # Placeholder logic, you need to replace this with actual product details retrieval
         product_details = [
             {"id": 1, "name": "Product A", "quantity": 2, "price": 10.0},
             {"id": 2, "name": "Product B", "quantity": 3, "price": 15.0},
@@ -135,7 +126,7 @@ class GenerateBillDialog(simpledialog.Dialog):
         self.save_bill_to_database()
 
     def save_bill_to_database(self):
-        # Placeholder for saving bill to database
+        # Placeholder for saving the bill to the database
         bill_data = {
             "bill_id": self.bill_id,
             "customer_name": self.customer_name.get(),
@@ -146,12 +137,11 @@ class GenerateBillDialog(simpledialog.Dialog):
 
         print("Saving Bill to Database:", bill_data)
         # Implement your database integration logic here
-
 class BillingTab(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         self.create_widgets()
-
+        
     def create_widgets(self):
         # Navigation bar
         nav_frame = tk.Frame(self)
@@ -162,8 +152,7 @@ class BillingTab(tk.Frame):
         self.search_var = tk.StringVar()
         search_entry = ttk.Entry(nav_frame, textvariable=self.search_var, width=30)
         search_entry.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
-        search_entry.bind("<FocusIn>", self.show_suggestions)
-
+        # search_entry.bind("<FocusIn>", self.show_suggestions)
         search_button = tk.Button(nav_frame, text="Search")
         search_button.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
@@ -189,11 +178,6 @@ class BillingTab(tk.Frame):
         vertical_scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.bill_treeview.yview)
         vertical_scrollbar.grid(row=1, column=2, sticky="ns")
         self.bill_treeview.configure(yscrollcommand=vertical_scrollbar.set)
-
-    def show_suggestions(self, event):
-        if self.search_var.get():
-            popup = SearchPopup(self, self.search_var, [])
-            self.wait_window(popup)
 
     def generate_bill(self):
         dialog = GenerateBillDialog(self.master)
@@ -271,13 +255,17 @@ class InventoryTab(tk.Frame):
 
         # Fetch items from the database
         cursor.execute("SELECT * FROM items")
-        item_list = cursor.fetchall()
+        global item_list
+        item_list= cursor.fetchall()
 
         conn.close()
 
         # Placeholder: Update the GUI with loaded items
         self.update_inventory_treeview(item_list)
 
+    def get_item_list(self):
+        return item_list
+    
     def update_inventory_treeview(self, item_list):
         # Clear existing items in the treeview
         for item in self.inventory_treeview.get_children():
@@ -385,6 +373,8 @@ class ProductsTab(tk.Frame):
         # Add loaded items to the treeview
         for product in item_list:
             self.product_treeview.insert("", "end", values=product)
+    
+
 
 class ProductDialog(tk.Toplevel):
     def __init__(self, parent):
